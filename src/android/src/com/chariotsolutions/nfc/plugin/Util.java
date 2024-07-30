@@ -1,5 +1,6 @@
 package com.chariotsolutions.nfc.plugin;
 
+import android.os.Parcelable;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.Tag;
@@ -38,9 +39,9 @@ public class Util {
                 // mTag.getTagService(); of the Ndef object sometimes returns null
                 // see http://issues.mroland.at/index.php?do=details&task_id=47
                 try {
-                  json.put("canMakeReadOnly", ndef.canMakeReadOnly());
+                    json.put("canMakeReadOnly", ndef.canMakeReadOnly());
                 } catch (NullPointerException e) {
-                  json.put("canMakeReadOnly", JSONObject.NULL);
+                    json.put("canMakeReadOnly", JSONObject.NULL);
                 }
             } catch (JSONException e) {
                 Log.e(TAG, "Failed to convert ndef into json: " + ndef.toString(), e);
@@ -49,13 +50,17 @@ public class Util {
         return json;
     }
 
-    static JSONObject tagToJSON(Tag tag) {
+    static JSONObject tagToJSON(Tag tag, Parcelable[] messages) {
         JSONObject json = new JSONObject();
 
         if (tag != null) {
             try {
                 json.put("id", byteArrayToJSON(tag.getId()));
                 json.put("techTypes", new JSONArray(Arrays.asList(tag.getTechList())));
+
+                if (messages != null && messages.length > 0) {
+                    json.put("ndefMessage", messageToJSON((NdefMessage)messages[0]));
+                }
             } catch (JSONException e) {
                 Log.e(TAG, "Failed to convert tag into json: " + tag.toString(), e);
             }
