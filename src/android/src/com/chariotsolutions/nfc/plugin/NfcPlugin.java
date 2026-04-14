@@ -644,9 +644,12 @@ public class NfcPlugin extends CordovaPlugin {
             Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
             Parcelable[] messages = intent.getParcelableArrayExtra((NfcAdapter.EXTRA_NDEF_MESSAGES));
 
+            boolean isNfcIntent = false;
+
             if (action.equals(NfcAdapter.ACTION_NDEF_DISCOVERED)) {
                 Ndef ndef = Ndef.get(tag);
                 fireNdefEvent(NDEF_MIME, ndef, messages);
+                isNfcIntent = true;
 
             } else if (action.equals(NfcAdapter.ACTION_TECH_DISCOVERED)) {
                 for (String tagTech : tag.getTechList()) {
@@ -658,13 +661,20 @@ public class NfcPlugin extends CordovaPlugin {
                         fireNdefEvent(NDEF, ndef, messages);
                     }
                 }
+                isNfcIntent = true;
             }
 
             if (action.equals(NfcAdapter.ACTION_TAG_DISCOVERED)) {
                 fireTagEvent(tag);
+                isNfcIntent = true;
             }
 
-            setIntent(new Intent());
+            // Only clear the intent if it was an NFC intent that we consumed.
+            // Clearing non-NFC intents (e.g. ACTION_VIEW from widget taps) breaks
+            // other plugins that read the launch intent later.
+            if (isNfcIntent) {
+                setIntent(new Intent());
+            }
         });
     }
 
