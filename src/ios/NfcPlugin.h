@@ -30,6 +30,7 @@
 // Handle launch data
 - (void)parseLaunchIntent:(CDVInvokedUrlCommand *)command;
 - (void)messageReceived:(NFCNDEFMessage *)message;
+- (void)urlReceived:(NSString *)urlString;
 
 // Added iOS 13
 - (void)scanNdef:(CDVInvokedUrlCommand *)command;

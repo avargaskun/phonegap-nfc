@@ -9,6 +9,7 @@
 
 static void * UserActivityPropertyKey = &UserActivityPropertyKey;
 static NFCNDEFMessage * LaunchMessage = nil;
+static NSString * LaunchURL = nil;
 static NfcPlugin* Listener = nil;
 
 @implementation AppDelegate (PhonegapNfc)
@@ -38,6 +39,29 @@ swizzledContinueUserActivity:(NSUserActivity *)userActivity
                     LaunchMessage = messagePayload;
                 }
                 return YES;
+            }
+            // Fallback — Universal Link without NDEF payload.
+            // This happens when the URL is opened via simctl, Safari, or another app
+            // rather than from an NFC tag scan. The URL still contains the tag ID
+            // (in the fragment) and name (in the query param), so NfcTag can parse it.
+            else
+            {
+                NSURL *webpageURL = userActivity.webpageURL;
+                if (webpageURL != nil)
+                {
+                    NSString *urlString = webpageURL.absoluteString;
+                    NSLog(@"nfcDelegate - received Universal Link without NDEF: %@", urlString);
+                    if (Listener != nil)
+                    {
+                        [Listener urlReceived:urlString];
+                    }
+                    else
+                    {
+                        // Cold start — buffer for parseLaunchIntent.
+                        LaunchURL = urlString;
+                    }
+                    return YES;
+                }
             }
         }
     }
@@ -104,19 +128,27 @@ swizzledContinueUserActivity:(NSUserActivity *)userActivity
 
     NFCNDEFMessage* ndefMessage = LaunchMessage;
     LaunchMessage = nil;
-    
+    NSString* launchURL = LaunchURL;
+    LaunchURL = nil;
+
     CDVPluginResult* pluginResult;
-    
-    if (ndefMessage == nil)
-    {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_INTENT"];
-    }
-    else
+
+    if (ndefMessage != nil)
     {
         NSDictionary* parsedMessage = [self buildTagDictionary:ndefMessage metaData:nil];
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:parsedMessage];
     }
-    
+    else if (launchURL != nil)
+    {
+        // URL string fallback — same as Android's getDataString() path.
+        // NfcTag JS constructor accepts strings.
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:launchURL];
+    }
+    else
+    {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_INTENT"];
+    }
+
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
@@ -129,7 +161,25 @@ swizzledContinueUserActivity:(NSUserActivity *)userActivity
 
     if (channelCallbackId) {
         NSLog(@"Sending NFC data via channelCallbackId so an NDEF event fires)");
-        
+
+        CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:nfcEvent];
+        [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:channelCallbackId];
+    }
+}
+
+- (void)urlReceived:(NSString *)urlString {
+    NSLog(@"urlReceived: %@", urlString);
+
+    // Send URL string through the channel callback as an NDEF event.
+    // JS NfcTag constructor accepts strings and parses the URI.
+    NSMutableDictionary *nfcEvent = [NSMutableDictionary new];
+    nfcEvent[@"type"] = @"ndef";
+    nfcEvent[@"tag"] = urlString;
+
+    if (channelCallbackId) {
+        NSLog(@"Sending URL via channelCallbackId so an NDEF event fires");
+
         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:nfcEvent];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:channelCallbackId];
